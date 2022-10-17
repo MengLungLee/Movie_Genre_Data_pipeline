@@ -49,7 +49,7 @@ raw_df = autoload_Ingest_Raw(rawPath, "json")
 
 raw_moive_data_df = (
     raw_df.select(
-            col("movie").alias("value"),
+            explode(col("movie")).alias("value"),
             lit("movie.json").alias("datasource"),
             current_timestamp().alias("ingesttime"),
             lit("new").alias("status"),
