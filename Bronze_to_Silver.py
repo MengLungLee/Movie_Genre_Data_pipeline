@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md ### Setting up configuration file 
-# MAGIC 
+# MAGIC
 # MAGIC Get data path from configuration.py, including Raw, Bronze, Silver data path.
 
 # COMMAND ----------
@@ -10,8 +10,8 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC 
-# MAGIC 
+# MAGIC
+# MAGIC
 # MAGIC ## Silver Table: Enriched Recording Data
 # MAGIC As a second hop in our silver level, we will do the follow enrichments and checks:
 # MAGIC - Check and Cast all the data type where inferred from JSON format
@@ -32,9 +32,9 @@ bronze_df = (
 # COMMAND ----------
 
 # MAGIC %md ### Extract the "value" Column
-# MAGIC 
+# MAGIC
 # MAGIC Extract the structtype from the value column and split three different tables, movie, genres, originalLanguage.
-# MAGIC 
+# MAGIC
 # MAGIC Check each data type and cast its type reasonable.
 
 # COMMAND ----------
@@ -43,8 +43,7 @@ bronze_df.printSchema()
 
 # COMMAND ----------
 
-from pyspark.sql.functions import explode, flatten, lit, when
-
+from pyspark.sql.functions import *
 bronzeAgumentedDF = bronze_df.select("value", "value.*")
 
 silver_movie = bronzeAgumentedDF.select(
@@ -82,7 +81,7 @@ silver_language = bronzeAgumentedDF.select(
 # COMMAND ----------
 
 # MAGIC %md ### Distinct Rows and split to data as cleaned and quarantined 
-# MAGIC 
+# MAGIC
 # MAGIC **Runtime**, this column should greater than 0
 
 # COMMAND ----------
@@ -98,7 +97,7 @@ silver_movie_quarantined = silver_movie.distinct().filter(col("RunTime") < 0)
 # COMMAND ----------
 
 silver_genres_flatten = silver_genres.select(col("col.*")).distinct()
-silver_genres_clean = silver_genres_flatten.select(col("id").alias("Id"), col("name")).filter(col("name") != "").orderBy("Id")
+silver_genres_clean = silver_genres_flatten.select(col("id").alias("Id"), col("name")).filter(col("name") != "")
 
 # COMMAND ----------
 
@@ -241,3 +240,44 @@ LOCATION "{silverPath+"Language/"}"
 # COMMAND ----------
 
 # MAGIC %md ### Update Bronze Table to reflect the Loads
+
+# COMMAND ----------
+
+from delta.tables import *
+
+deltaTable = DeltaTable.forPath(spark, bronzePath)
+silverAugmented = silver_movie_clean.withColumn("status", lit("loaded"))
+
+update_match = "bronze.value = clean.value"
+update = {"status": "clean.status"}
+
+
+# Function to upsert microBatchOutputDF into Delta table using merge
+def upsertToDelta(microBatchOutputDF, batchId):
+  (deltaTable.alias("bronze").merge(
+      microBatchOutputDF.alias("clean"),
+      update_match)
+    .whenMatchedUpdate(set = update)
+    .execute()
+  )
+
+
+# COMMAND ----------
+
+(
+    silverAugmented.writeStream
+  .format("delta")
+  .trigger(once = True)
+  .foreachBatch(upsertToDelta)
+  .outputMode("update")
+  .start()
+)
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC SELECT * FROM movie_bronze
+
+# COMMAND ----------
+
+
