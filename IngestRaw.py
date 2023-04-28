@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md ### Setting up configuration file 
-# MAGIC 
+# MAGIC
 # MAGIC Get data path from configuration.py, including Raw, Bronze, Silver data path.
 
 # COMMAND ----------
@@ -25,7 +25,7 @@ json_schema = StructType.fromJson(json.loads(tmp.schema.json()))
 # COMMAND ----------
 
 # MAGIC %md ### Ingest Raw Data by AutoLoader and enrich it by adding Metadata
-# MAGIC 
+# MAGIC
 # MAGIC Adding Metadata, Datasource, Ingest_Time, Status, Ingest_timestamp.
 
 # COMMAND ----------
@@ -75,15 +75,18 @@ streamQuery = (raw_moive_data_df.writeStream
 
 # COMMAND ----------
 
-spark.sql("""
-DROP TABLE IF EXISTS movie_bronze
-""")
-
-spark.sql(f"""
-CREATE TABLE movie_bronze
+# spark.sql(
+#     """
+# DROP TABLE IF EXISTS movie_silver
+# """
+# )
+spark.sql(
+    f"""
+CREATE TABLE IF NOT EXISTS movie_silver
 USING DELTA
 LOCATION "{bronzePath}"
-""")
+"""
+)
 
 # COMMAND ----------
 
