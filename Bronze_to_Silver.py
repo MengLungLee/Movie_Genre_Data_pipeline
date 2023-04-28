@@ -240,6 +240,8 @@ LOCATION "{silverPath+"Language/"}"
 # COMMAND ----------
 
 # MAGIC %md ### Update Bronze Table to reflect the Loads
+# MAGIC \
+# MAGIC Step 1: Update loaded records from silver to bronze
 
 # COMMAND ----------
 
@@ -248,14 +250,14 @@ from delta.tables import *
 deltaTable = DeltaTable.forPath(spark, bronzePath)
 silverAugmented = silver_movie_clean.withColumn("status", lit("loaded"))
 
-update_match = "bronze.value = clean.value"
-update = {"status": "clean.status"}
+update_match = "bronze.value = silver.value"
+update = {"status": "silver.status"}
 
 
 # Function to upsert microBatchOutputDF into Delta table using merge
 def upsertToDelta(microBatchOutputDF, batchId):
   (deltaTable.alias("bronze").merge(
-      microBatchOutputDF.alias("clean"),
+      microBatchOutputDF.alias("silver"),
       update_match)
     .whenMatchedUpdate(set = update)
     .execute()
@@ -276,7 +278,42 @@ def upsertToDelta(microBatchOutputDF, batchId):
 # COMMAND ----------
 
 # MAGIC %sql
+# MAGIC -- Check bronze table if the records have been updated in "status" from "new" to "loaded"
 # MAGIC SELECT * FROM movie_bronze
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC Step 2: Update Quarantined records
+
+# COMMAND ----------
+
+
+silverAugmented_qu = silver_movie_quarantined.withColumn(
+    "status", lit("quarantined")
+)
+
+(
+    silverAugmented_qu.writeStream
+  .format("delta")
+  .trigger(once = True)
+  .foreachBatch(upsertToDelta)
+  .outputMode("update")
+  .start()
+)
+
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC SELECT * FROM movie_bronze WHERE status = 'quarantined'
+
+# COMMAND ----------
+
+quarantined_count = spark.sql("SELECT count(*) FROM movie_bronze WHERE status = 'quarantined'").collect()[0][0]
+clean_count = spark.sql("SELECT count(*) FROM movie_bronze WHERE status = 'loaded'").collect()[0][0]
+
+print("Quarantined Count: {}, Cleaed Count: {}".format(quarantined_count, clean_count))
 
 # COMMAND ----------
 
