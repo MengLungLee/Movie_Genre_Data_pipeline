@@ -20,3 +20,12 @@ silverPath = PipelinePath + "Silver/"
 checkpointPath = PipelinePath + "checkpoints/"
 bronzeCheckpoint = checkpointPath + "Bronze/"
 silverCheckpoint = checkpointPath + "Silver/"
+
+# COMMAND ----------
+
+spark.sql(f"CREATE DATABASE IF NOT EXISTS Movie")
+spark.sql(f"USE Movie")
+
+# COMMAND ----------
+
+
